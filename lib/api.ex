@@ -1,5 +1,8 @@
 defmodule Socex.Api do
-	use Silverb, [{"@ttl", Application.get_env(:socex, :update_ttl)}]
+	use Silverb, 	[
+						{"@ttl", Application.get_env(:socex, :update_ttl)},
+						{"@show_commands", ["ls"]}
+					]
 	use ExActor.GenServer, export: :vk_api
 	use Httphex,  [
 		host: "https://api.vk.com/method", 
@@ -25,7 +28,7 @@ defmodule Socex.Api do
 		case dialogs_list do
 			{:error, error} -> 
 				Socex.error("error due loading dialogs list #{inspect error}")
-				{:noreply, fullstate, @ttl}
+				{:noreply, HashUtils.set(fullstate, [dialogs: [], stamp: Exutils.makestamp]), @ttl}
 			^dialogs ->
 				{:noreply, fullstate, @ttl}
 			new_dialogs when is_list(new_dialogs) -> 
@@ -33,23 +36,41 @@ defmodule Socex.Api do
 				{:noreply, HashUtils.set(fullstate, [dialogs: new_dialogs, stamp: Exutils.makestamp]) |> store, @ttl}
 		end
 	end
-	defcast command(cmd), state: fullstate = %Socex{state: "menu", dialogs: dialogs} do
+	defcall command(cmd), when: is_binary(cmd), state: fullstate = %Socex{state: "menu", dialogs: dialogs}, timeout: 60000 do
 		case Maybe.to_integer(cmd) do
 			int when (is_integer(int) and (int >= 0)) -> 
 				case Enum.at(dialogs, int) do
-					nil -> 	{:noreply, fullstate, timeout(fullstate)}
-					some -> IO.inspect(some)
-							#
-							#	TODO
-							#
-							{:noreply, fullstate, timeout(fullstate)}
+					nil -> {:reply, :ok, fullstate, timeout(fullstate)}
+					subj -> swith_to_dialog(fullstate, subj)
+				end
+			"" ->
+				{:reply, :ok, fullstate, timeout(fullstate)}
+			scom when (scom in @show_commands) ->
+				process_show_command(fullstate, scom)
+				{:reply, :ok, fullstate, timeout(fullstate)}
+			_ ->
+				case Enum.filter(dialogs, fn(%{title: title}) -> String.contains?(title, cmd) end ) do
+					[] -> {:reply, :ok, fullstate, timeout(fullstate)}
+					[subj|_] -> swith_to_dialog(fullstate, subj)
 				end
 		end
-		{:noreply, fullstate, @ttl}
+	end
+	defp swith_to_dialog(fullstate = %Socex{}, subj) do
+		IO.inspect(subj)
+		#
+		#	TODO
+		#
+		{:reply, :ok, fullstate, timeout(fullstate)}
 	end
 
 	defp store(state = %Socex{}), do: Socex.Tinca.put(state, :curstate, :curstate)
 	def cur_state, do: Socex.Tinca.get(:curstate, :curstate)
+
+	defp process_show_command(%Socex{state: "menu", dialogs: dialogs}, "ls"), do: Socex.Shell.draw_dialogs_list(dialogs)
+
+	#
+	#	to vk api
+	#
 
 	defp dialogs_list do
 		sleep
