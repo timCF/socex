@@ -4,10 +4,12 @@ defmodule Socex.Shell do
 						{"@cyan", IO.ANSI.cyan},
 						{"@yellow", IO.ANSI.yellow},
 						{"@magenta", IO.ANSI.magenta},
+						{"@blue", IO.ANSI.blue},
+						{"@bright", IO.ANSI.bright}
 					]
 
 	def go, do: ((IO.gets(prompt) |> String.strip |> Socex.Api.command); go)
-	defp prompt do
+	def prompt do
 		case Socex.Api.cur_state do
 			%Socex{state: "menu"} -> "cmd> "
 			%Socex{state: "dialog", current_dialog: %{title: title}} -> "#{title}> "
@@ -20,7 +22,15 @@ defmodule Socex.Shell do
 		|> Enum.join("\n")
 		|> IO.puts
 	end
-
 	defp col(some, col), do: "#{IO.ANSI.reset}#{col}#{some}#{IO.ANSI.reset}"
+
+	def help do
+		colors = [@green, @cyan, @yellow, @magenta, @blue, @bright]
+		"\nHello, user. This is crazy console VK chat. Special commands: [ls]. Enjoy!\n"
+		|> String.split(" ")
+		|> Stream.map(&(col(&1, Enum.shuffle(colors) |> List.first)))
+		|> Enum.join(" ")
+		|> IO.puts
+	end
 
 end

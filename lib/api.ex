@@ -32,7 +32,7 @@ defmodule Socex.Api do
 			^dialogs ->
 				{:noreply, fullstate, @ttl}
 			new_dialogs when is_list(new_dialogs) -> 
-				Socex.Shell.draw_dialogs_list(new_dialogs)
+				Socex.notice("got new dialogs")
 				{:noreply, HashUtils.set(fullstate, [dialogs: new_dialogs, stamp: Exutils.makestamp]) |> store, @ttl}
 		end
 	end

@@ -7,6 +7,16 @@ defmodule Socex do
                 :curstate
               ]
 
+  defp logex_error(_) do
+    IO.write(Socex.Shell.prompt)
+  end
+  defp logex_warn(_) do
+    IO.write(Socex.Shell.prompt)
+  end
+  defp logex_notice(_) do
+    IO.write(Socex.Shell.prompt)
+  end
+
   # See http://elixir-lang.org/docs/stable/elixir/Application.html
   # for more information on OTP Applications
   def start(_type, _args) do

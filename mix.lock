@@ -13,7 +13,7 @@
   "ibrowse": {:git, "https://github.com/cmullaparthi/ibrowse.git", "5ee4a806611fcf25cc74155871571e9983a0d0fc", [tag: "5ee4a806611fcf25cc74155871571e9983a0d0fc"]},
   "idna": {:hex, :idna, "1.0.2"},
   "jazz": {:git, "https://github.com/meh/jazz.git", "49f335492aca5516495199dd81dd18b845ebaa69", []},
-  "logex": {:git, "https://github.com/timCF/logex.git", "ca4bc92cd7b32845c1db630e719e812f07094756", []},
+  "logex": {:git, "https://github.com/timCF/logex.git", "cec2390f0fa3772a2717e10d969e2f400c6fe5df", []},
   "maybe": {:git, "https://github.com/timCF/maybe.git", "0c500e3abb3d9b82b65915bf7f388ccf004bb790", []},
   "meck": {:git, "git://github.com/eproxus/meck", "dde759050eff19a1a80fd854d7375174b191665d", [tag: "0.8.2"]},
   "quickrand": {:hex, :quickrand, "1.5.0"},
