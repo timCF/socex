@@ -2,7 +2,8 @@ defmodule Socex.Api do
 	use Silverb, 	[
 						{"@ttl", Application.get_env(:socex, :update_ttl)},
 						{"@show_commands", ["ls", "help"]},
-						{"@mess_count", 200}
+						{"@mess_count", 200},
+						{"@tokens", Application.get_env(:socex, :vk_tokens)}
 					]
 	use ExActor.GenServer, export: :vk_api
 	use Httphex,  [
@@ -26,7 +27,7 @@ defmodule Socex.Api do
 		{:ok, %Socex{} |> store, 0}
 	end
 	definfo :timeout, state: fullstate = %Socex{state: "menu", dialogs: dialogs} do
-		case dialogs_list do
+		case dialogs_list_union do
 			{:error, error} -> 
 				Socex.error("error due loading dialogs list #{inspect error}")
 				{:noreply, HashUtils.set(fullstate, [dialogs: [], stamp: Exutils.makestamp]), @ttl}
@@ -42,7 +43,7 @@ defmodule Socex.Api do
 		case messages_list(current_dialog) do
 			{:error, error} -> 
 				Socex.error("error due loading messages list #{inspect error}")
-				{:noreply, HashUtils.set(fullstate, [stamp: Exutils.makestamp]), @ttl}
+				{:noreply, HashUtils.set(fullstate, [messages: [], stamp: Exutils.makestamp]), @ttl}
 			^messages ->
 				{:noreply, fullstate, @ttl}
 			lst when is_list(lst) -> 
@@ -81,8 +82,8 @@ defmodule Socex.Api do
 		{:reply, :ok, fullstate, timeout(fullstate)}
 		|> store
 	end
-	defcall command(mess), state: fullstate = %Socex{state: "dialog"}, timeout: 60000 do
-		case send_message(mess, fullstate) do
+	defcall command(mess), state: fullstate = %Socex{state: "dialog", current_dialog: %{user: user}}, timeout: 60000 do
+		case send_message(mess, fullstate, Map.get(@tokens, user)) do
 			:ok -> :ok
 			{:error, error} -> Socex.error("error due sending message #{inspect error}")
 		end
@@ -105,13 +106,23 @@ defmodule Socex.Api do
 	#	to vk api
 	#
 
-	defp dialogs_list do
+	defp dialogs_list_union do
+		Enum.reduce(@tokens, [], fn
+			{_, _}, acc = {:error, _} -> acc
+			{user, token}, acc -> 
+				case dialogs_list(token) do
+					acc = {:error, _} -> acc
+					lst when is_list(lst) -> acc ++ Enum.map(lst, &(Map.put(&1, :user, user)))
+				end
+		end)
+	end
+	defp dialogs_list(token) when is_binary(token) do
 		sleep
-		case %{access_token: Socex.Storage.vk_token} |> http_get(["messages.getDialogs"]) do
+		case %{access_token: token} |> http_get(["messages.getDialogs"]) do
 			%{response: [_|lst]} -> 
 				Stream.map(lst, fn
 					ans = %{chat_id: chat_id} when (is_integer(chat_id) and (chat_id > 0)) -> %{chat_id: chat_id, title: Map.get(ans, :title) |> to_string}
-					%{uid: uid} when (is_integer(uid) and (uid > 0)) -> %{uid: uid, title: case get_user_name(uid) do nil -> to_string(uid); bin when is_binary(bin) -> bin end }
+					%{uid: uid} when (is_integer(uid) and (uid > 0)) -> %{uid: uid, title: get_user_name(uid, token, to_string(uid))}
 					_ -> nil
 				end)
 				|> Enum.filter(&(&1 != nil))
@@ -119,14 +130,13 @@ defmodule Socex.Api do
 				{:error, some}
 		end
 	end
-	defp get_user_name(uid, default \\ nil)
-	defp get_user_name(uid, default) when is_integer(uid) do
+	defp get_user_name(uid, token, default) when is_integer(uid) do
 		case Socex.Tinca.get(uid, :users_names) do
 			bin when is_binary(bin) -> 
 				bin
 			nil -> 
 				sleep
-				case %{access_token: Socex.Storage.vk_token, user_ids: to_string(uid)} |> http_get(["users.get"]) do
+				case %{access_token: token, user_ids: to_string(uid)} |> http_get(["users.get"]) do
 					%{response: [%{first_name: n1, last_name: n2, uid: uid}]} -> Socex.Tinca.put("#{n1} #{n2}", uid, :users_names)
 					_ -> default
 				end
@@ -134,36 +144,38 @@ defmodule Socex.Api do
 	end
 
 
-	defp messages_list(%{chat_id: chat_id}) do
+	defp messages_list(%{chat_id: chat_id, user: user}) do
 		sleep
-		%{access_token: Socex.Storage.vk_token, chat_id: chat_id, count: @mess_count}
+		token = Map.get(@tokens, user)
+		%{access_token: token, chat_id: chat_id, count: @mess_count}
 		|> http_get(["messages.getHistory"])
-		|> parse_mess_list
+		|> parse_mess_list(token)
 	end
-	defp messages_list(%{uid: uid}) do
+	defp messages_list(%{uid: uid, user: user}) do
 		sleep
-		%{access_token: Socex.Storage.vk_token, user_id: uid, count: @mess_count}
+		token = Map.get(@tokens, user)
+		%{access_token: token, user_id: uid, count: @mess_count}
 		|> http_get(["messages.getHistory"])
-		|> parse_mess_list
+		|> parse_mess_list(token)
 	end
-	defp parse_mess_list(%{response: [_|lst = [_|_]]}) do
+	defp parse_mess_list(%{response: [_|lst = [_|_]]}, token) do
 		Enum.reduce(lst, [], fn
-			el = %{from_id: uid, body: body, date: stamp}, acc when (is_integer(uid) and (uid >= 0) and is_binary(body) and is_integer(stamp) and (stamp >= 0)) -> [%{user: get_user_name(uid, to_string(uid)), body: String.strip(body), date: :timer.seconds(stamp) + :timer.hours(3), att: Map.get(el, :attachment), resend: Map.get(el, :fwd_messages)}|acc]
+			el = %{from_id: uid, body: body, date: stamp}, acc when (is_integer(uid) and (uid >= 0) and is_binary(body) and is_integer(stamp) and (stamp >= 0)) -> [%{user: get_user_name(uid, token, to_string(uid)), body: String.strip(body), date: :timer.seconds(stamp) + :timer.hours(3), att: Map.get(el, :attachment), resend: Map.get(el, :fwd_messages)}|acc]
 			_, acc -> acc
 		end)
 	end
-	defp parse_mess_list(some), do: {:error, some}
+	defp parse_mess_list(some, _), do: {:error, some}
 
 
-	defp send_message(bin, %Socex{current_dialog: %{chat_id: chat_id}}) when is_binary(bin) do
+	defp send_message(bin, %Socex{current_dialog: %{chat_id: chat_id}}, token) when is_binary(bin) do
 		sleep
-		%{access_token: Socex.Storage.vk_token, chat_id: chat_id, message: bin}
+		%{access_token: token, chat_id: chat_id, message: bin}
 		|> http_get(["messages.send"])
 		|> parse_mess_req
 	end
-	defp send_message(bin, %Socex{current_dialog: %{uid: user_id}}) when is_binary(bin) do
+	defp send_message(bin, %Socex{current_dialog: %{uid: user_id}}, token) when is_binary(bin) do
 		sleep
-		%{access_token: Socex.Storage.vk_token, user_id: user_id, message: bin}
+		%{access_token: token, user_id: user_id, message: bin}
 		|> http_get(["messages.send"])
 		|> parse_mess_req
 	end

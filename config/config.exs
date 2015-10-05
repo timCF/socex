@@ -23,7 +23,10 @@ use Mix.Config
 
 config :socex,
 	update_ttl: 5000,
-	vk_token: "",
+	vk_tokens: %{
+		"Илья" => "",
+		"Toko" => ""
+	},
 	vk_token_link: "https://oauth.vk.com/authorize?client_id=4950890&scope=notify,friends,photos,audio,video,docs,notes,pages,status,offers,questions,wall,groups,messages,notifications,stats,ads,offline&redirect_uri=http://oauth.vk.com/blank.html&display=page&response_type=token"
 
 # It is also possible to import configuration files, relative to this

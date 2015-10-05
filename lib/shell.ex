@@ -21,7 +21,7 @@ defmodule Socex.Shell do
 	def draw_dialogs_list([]), do: :ok
 	def draw_dialogs_list(lst) do
 		Stream.with_index(lst)
-		|> Stream.map(fn({%{title: title}, index}) -> "#{col(index, @cyan)} #{col(title, @yellow)}" end)
+		|> Stream.map(fn({%{title: title, user: user}, index}) -> "#{col(index, @cyan)} #{col(title, @yellow)} (#{col(user, @green)})" end)
 		|> Enum.join("\n")
 		|> IO.puts
 	end
