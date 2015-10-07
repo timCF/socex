@@ -21,7 +21,8 @@ defmodule Socex.Shell do
 	def draw_dialogs_list([]), do: :ok
 	def draw_dialogs_list(lst) do
 		Stream.with_index(lst)
-		|> Stream.map(fn({%{title: title, user: user}, index}) -> "#{col(index, @cyan)} #{col(title, @yellow)} (#{col(user, @green)})" end)
+		|> Enum.sort(fn({_,i1},{_,i2}) -> i1 > i2 end)
+		|> Stream.map(fn({%{title: title, user: user, pre: pre}, index}) -> "#{col(index, @cyan)} #{col(user, @green)} => #{col(title, @yellow)} : #{pre}" end)
 		|> Enum.join("\n")
 		|> IO.puts
 	end
@@ -58,7 +59,7 @@ defmodule Socex.Shell do
 	defp maybe_add_resend(str, resend), do: str<>" : #{inspect(resend) |> col(@inverse)}"
 
 	def help do
-		"\nHello, user. This is crazy console VK chat. Special commands: 'ls' 'cd ..' 'help'. Enjoy!\n"
+		"\nHello, user. This is crazy console VK chat. Special commands: \n\nls \ncd .. \nhelp \nimg-cat \n\nEnjoy!\n"
 		|> String.split(" ")
 		|> Stream.map(&(col(&1, Enum.shuffle(@all_colors) |> List.first)))
 		|> Enum.join(" ")

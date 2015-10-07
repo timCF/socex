@@ -57,6 +57,11 @@ defmodule Socex.Api do
 		{:reply, :ok, fullstate, timeout(fullstate)}
 		|> store
 	end
+	defcall command( << "img-cat ", rest :: binary >> ), state: fullstate = %Socex{}, timeout: 60000 do
+		:os.cmd('img-cat "#{rest}"') |> IO.puts
+		{:reply, :ok, fullstate, timeout(fullstate)}
+		|> store
+	end
 	defcall command(cmd), when: is_binary(cmd), state: fullstate = %Socex{state: "menu", dialogs: dialogs}, timeout: 60000 do
 		case Maybe.to_integer(cmd) do
 			int when (is_integer(int) and (int >= 0)) -> 
@@ -115,14 +120,29 @@ defmodule Socex.Api do
 					lst when is_list(lst) -> acc ++ Enum.map(lst, &(Map.put(&1, :user, user)))
 				end
 		end)
+		|> sort_dialogs_list
+	end
+	defp sort_dialogs_list({:error, error}), do: {:error, error}
+	defp sort_dialogs_list(lst) when is_list(lst) do
+		by_user = Enum.group_by(lst, fn(%{user: user}) -> user end) |> Enum.map(fn({_, ulst}) -> Enum.reverse(ulst) end)
+		0..(Stream.map(by_user, &length/1) |> Enum.max)
+		|> Enum.map(fn(n) -> 
+			Enum.map(by_user, fn(ulst) -> 
+				case Enum.at(ulst, n) do
+					nil -> []
+					some = %{} -> some
+				end
+			end)
+		end)
+		|> List.flatten
 	end
 	defp dialogs_list(token) when is_binary(token) do
 		sleep
 		case %{access_token: token} |> http_get(["messages.getDialogs"]) do
 			%{response: [_|lst]} -> 
 				Stream.map(lst, fn
-					ans = %{chat_id: chat_id} when (is_integer(chat_id) and (chat_id > 0)) -> %{chat_id: chat_id, title: Map.get(ans, :title) |> to_string}
-					%{uid: uid} when (is_integer(uid) and (uid > 0)) -> %{uid: uid, title: get_user_name(uid, token, to_string(uid))}
+					ans = %{chat_id: chat_id, body: pre} when (is_integer(chat_id) and (chat_id > 0) and is_binary(pre)) -> %{chat_id: chat_id, pre: pre, title: Map.get(ans, :title) |> to_string}
+					%{uid: uid, body: pre} when (is_integer(uid) and (uid > 0) and is_binary(pre)) -> %{uid: uid, pre: pre, title: get_user_name(uid, token, to_string(uid))}
 					_ -> nil
 				end)
 				|> Enum.filter(&(&1 != nil))
